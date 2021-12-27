@@ -1,0 +1,16 @@
+PODS:
+  - IPaVRKit (0.1.0)
+
+DEPENDENCIES:
+  - IPaVRKit (from `../`)
+
+EXTERNAL SOURCES:
+  IPaVRKit:
+    :path: "../"
+
+SPEC CHECKSUMS:
+  IPaVRKit: b0b17ba7185ff8dbb8432eee22a1c461ef90906e
+
+PODFILE CHECKSUM: c432c1e40b47baaf69d6b8798231f2b4639962ac
+
+COCOAPODS: 1.11.2

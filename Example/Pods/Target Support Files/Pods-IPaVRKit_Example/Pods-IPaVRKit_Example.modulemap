@@ -1,0 +1,6 @@
+framework module Pods_IPaVRKit_Example {
+  umbrella header "Pods-IPaVRKit_Example-umbrella.h"
+
+  export *
+  module * { export * }
+}
