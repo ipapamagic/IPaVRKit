@@ -8,7 +8,7 @@
 
 Pod::Spec.new do |s|
   s.name             = 'IPaVRKit'
-  s.version          = '1.0'
+  s.version          = '1.0.0'
   s.summary          = 'VR Video Player'
 
 # This description is used to generate tags and improve search results.
@@ -17,9 +17,7 @@ Pod::Spec.new do |s|
 #   * Write the description between the DESC delimiters below.
 #   * Finally, don't worry about the indent, CocoaPods strips it!
 
-  s.description      = <<-DESC
-TODO: Add long description of the pod here.
-                       DESC
+  s.description      = 'Tool for vr with SpriteKit / SceneKit'
 
   s.homepage         = 'https://github.com/ipapamagic/IPaVRKit'
   # s.screenshots     = 'www.example.com/screenshots_1', 'www.example.com/screenshots_2'
@@ -30,7 +28,7 @@ TODO: Add long description of the pod here.
 
   s.ios.deployment_target = '13.0'
 
-  s.source_files = 'IPaVRKit/Classes/**/*'
+  s.source_files = 'Sources/IPaVRKit/**/*'
   
   # s.resource_bundles = {
   #   'IPaVRKit' => ['IPaVRKit/Assets/*.png']
@@ -40,5 +38,5 @@ TODO: Add long description of the pod here.
   # s.frameworks = 'UIKit', 'MapKit'
   # s.dependency 'AFNetworking', '~> 2.3'
   s.dependency 'IPaAVPlayer/Core'
-  s.dependency 'IPaImageTool', '~> 2.4'
+  s.dependency 'IPaImageTool', '~> 2.6.0'
 end

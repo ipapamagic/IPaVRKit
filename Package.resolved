@@ -1,0 +1,23 @@
+{
+  "pins" : [
+    {
+      "identity" : "ipaavplayer",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ipapamagic/IPaAVPlayer.git",
+      "state" : {
+        "revision" : "62175446fa9ceab06078f764dbeeba8a68ca8650",
+        "version" : "3.0.0"
+      }
+    },
+    {
+      "identity" : "ipaimagetool",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ipapamagic/IPaImageTool.git",
+      "state" : {
+        "revision" : "c9810bbd9d1c197bf195821fb290e0395fb15f8f",
+        "version" : "2.6.0"
+      }
+    }
+  ],
+  "version" : 2
+}
