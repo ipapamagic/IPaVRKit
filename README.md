@@ -1,24 +1,17 @@
 # IPaVRKit
 
-[![CI Status](https://img.shields.io/travis/IPa Chen/IPaVRKit.svg?style=flat)](https://travis-ci.org/IPa Chen/IPaVRKit)
-[![Version](https://img.shields.io/cocoapods/v/IPaVRKit.svg?style=flat)](https://cocoapods.org/pods/IPaVRKit)
-[![License](https://img.shields.io/cocoapods/l/IPaVRKit.svg?style=flat)](https://cocoapods.org/pods/IPaVRKit)
-[![Platform](https://img.shields.io/cocoapods/p/IPaVRKit.svg?style=flat)](https://cocoapods.org/pods/IPaVRKit)
-
-## Example
-
-To run the example project, clone the repo, and run `pod install` from the Example directory first.
-
-## Requirements
+IPaVRKit is distributed as a Swift Package.
 
 ## Installation
 
-IPaVRKit is available through [CocoaPods](https://cocoapods.org). To install
-it, simply add the following line to your Podfile:
+Add this repository in Xcode through **File > Add Package Dependencies**:
 
-```ruby
-pod 'IPaVRKit'
+```text
+https://github.com/ipapamagic/IPaVRKit.git
 ```
+
+For in-progress app migrations, pin the package to the latest commit until a
+version tag is cut.
 
 ## Author
 

@@ -1,6 +1,0 @@
-framework module IPaVRKit {
-  umbrella header "IPaVRKit-umbrella.h"
-
-  export *
-  module * { export * }
-}
