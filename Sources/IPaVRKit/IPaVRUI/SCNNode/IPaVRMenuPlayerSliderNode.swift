@@ -16,7 +16,7 @@ public class IPaVRMenuPlayerSliderNode: IPaVrMenuSliderNode {
         guard let duration = self.avPlayer?.duration else {
             return
         }
-        self.avPlayer?.seekToTime(duration * Double(newValue), complete: nil)
+        self.avPlayer?.seek(to: duration * Double(newValue)) { _ in }
         
     }
 }
@@ -30,8 +30,8 @@ extension IPaVRMenuPlayerSliderNode:IPaVRMenuPlayerControl {
         self.progressSpriteNode.xScale = CGFloat(self._value)
         let currentTimePubliher = player.publisher(for:\.currentTime)
         let durationPublisher = player.publisher(for: \.duration)
-        self.playerAnyCancellable = currentTimePubliher.merge(with: durationPublisher).sink(receiveValue: {
-            _ in
+        self.playerAnyCancellable = currentTimePubliher.merge(with: durationPublisher).sink(receiveValue: { [weak self, weak player] _ in
+            guard let self, let player else { return }
             self._value = Float(player.currentTime / player.duration)
             self.progressSpriteNode.xScale = CGFloat(self._value)
         })

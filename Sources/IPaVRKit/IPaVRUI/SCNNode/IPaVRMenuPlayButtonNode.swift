@@ -36,7 +36,8 @@ extension IPaVRMenuPlayButtonNode:IPaVRMenuPlayerControl {
             self.image = self.pauseImage
             return
         }
-        self.isPlayAnyCancellable = player.publisher(for:\.isPlay).sink(receiveValue: { isPlay in
+        self.isPlayAnyCancellable = player.publisher(for:\.isPlay).sink(receiveValue: { [weak self] isPlay in
+            guard let self else { return }
             self.image = isPlay ? self.playImage : self.pauseImage
         })
     }

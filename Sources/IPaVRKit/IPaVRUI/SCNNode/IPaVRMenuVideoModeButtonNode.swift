@@ -43,8 +43,8 @@ public class IPaVRMenuVideoModeButtonNode: IPaVRMenuSimpleButtonNode {
 extension IPaVRMenuVideoModeButtonNode:IPaVRMenuSceneControl {
     public func setVRScene(_ scene: IPaVRVideoScene?) {
         if let scene = scene {
-            self.videoModeAnyCancellable = scene.publisher(for: \.videoMode).sink(receiveValue: { mode in
-                self.reloadMode(mode)
+            self.videoModeAnyCancellable = scene.publisher(for: \.videoMode).sink(receiveValue: { [weak self] mode in
+                self?.reloadMode(mode)
             })
         }
         else {

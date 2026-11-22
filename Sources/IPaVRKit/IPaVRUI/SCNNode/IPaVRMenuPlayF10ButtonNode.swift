@@ -16,7 +16,7 @@ class IPaVRMenuPlayF10ButtonNode: IPaVRMenuSimpleButtonNode {
             return
         }
         let time = min(avPlayer.duration,avPlayer.currentTime + 10)
-        avPlayer.seekToTime(time, complete: nil)
+        avPlayer.seek(to: time) { _ in }
     }
 }
 extension IPaVRMenuPlayF10ButtonNode:IPaVRMenuPlayerControl {

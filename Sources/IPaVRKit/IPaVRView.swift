@@ -120,7 +120,8 @@ open class IPaVRView: UIView {
                     return
                 }
                 
-                motionManager.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: .main) { motion, error in
+                motionManager.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: .main) { [weak self] motion, error in
+                    guard let self else { return }
                     if let currentAttitude = self.motionAttitude, self.isTrackingHead  {
    
                         self.vrScene?.currentEularAngle = SCNVector3( self.centerHeadAttiture.x - Float(currentAttitude.roll), Float(currentAttitude.yaw) - self.centerHeadAttiture.y, self.centerHeadAttiture.z - Float(currentAttitude.pitch))

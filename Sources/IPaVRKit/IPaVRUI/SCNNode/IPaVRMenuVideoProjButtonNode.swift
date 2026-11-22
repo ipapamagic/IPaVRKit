@@ -45,8 +45,8 @@ class IPaVRMenuVideoProjButtonNode: IPaVRMenuSimpleButtonNode {
 extension IPaVRMenuVideoProjButtonNode:IPaVRMenuSceneControl {
     public func setVRScene(_ scene: IPaVRVideoScene?) {
         if let scene = scene {
-            self.videoProjAnyCancellable = scene.publisher(for: \.videoProjection).sink(receiveValue: { projection in
-                self.reloadProjection(projection)
+            self.videoProjAnyCancellable = scene.publisher(for: \.videoProjection).sink(receiveValue: { [weak self] projection in
+                self?.reloadProjection(projection)
             })
         }
         else {

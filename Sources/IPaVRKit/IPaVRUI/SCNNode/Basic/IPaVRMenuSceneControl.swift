@@ -22,14 +22,21 @@ extension IPaVRMenuSceneControl {
             objc_setAssociatedObject(self, &sceneCancellable, newValue, objc_AssociationPolicy.OBJC_ASSOCIATION_RETAIN)
         }
     }
+    /// Held weakly: the scene owns its menu nodes (through `vrMenu`), so a
+    /// strong back reference would keep both alive for good.
     public var vrScene:IPaVRVideoScene? {
         get {
-            return objc_getAssociatedObject(self, &sceneHandle) as? IPaVRVideoScene
+            return (objc_getAssociatedObject(self, &sceneHandle) as? IPaVRWeakSceneBox)?.scene
         }
         set {
-            objc_setAssociatedObject(self, &sceneHandle, newValue, objc_AssociationPolicy.OBJC_ASSOCIATION_RETAIN)
+            objc_setAssociatedObject(self, &sceneHandle, IPaVRWeakSceneBox(newValue), objc_AssociationPolicy.OBJC_ASSOCIATION_RETAIN)
             self.setVRScene(newValue)
         }
 
     }
+}
+
+final class IPaVRWeakSceneBox {
+    weak var scene: IPaVRVideoScene?
+    init(_ scene: IPaVRVideoScene?) { self.scene = scene }
 }

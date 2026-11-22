@@ -32,6 +32,6 @@ extension IPaVRMenuPlayerCurrnetTimeNode :IPaVRMenuPlayerControl {
             else {
                 return String(format: "%d%.2d:%.2d",hour, minute,second)
             }
-        }).assign(to: \.text, on: self)
+        }).sink { [weak self] text in self?.text = text }
     }
 }

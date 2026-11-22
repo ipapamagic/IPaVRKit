@@ -19,7 +19,8 @@ extension IPaVRMenuPlayerFileNameNode :IPaVRMenuPlayerControl {
             self.playerAnyCancellable = nil
             return
         }
-        playerAnyCancellable = player.publisher(for: \.avPlayer.currentItem).sink(receiveValue: { item in
+        playerAnyCancellable = player.publisher(for: \.avPlayer.currentItem).sink(receiveValue: { [weak self] item in
+            guard let self else { return }
             guard let item = item else {
                 self.playerAnyCancellable = nil
                 return

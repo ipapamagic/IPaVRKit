@@ -55,9 +55,15 @@ public class IPaVRVideoScene: IPaVRScene {
     var videoSizeAnyCancellable:AnyCancellable?
     var playerAnyCancellable:AnyCancellable?
     
+    /// IPaAVPlayer 4 is main-actor isolated: holding it is fine from any
+    /// thread, but the KVO bindings to it are made on the main actor.
     @objc dynamic public var avPlayer:IPaAVPlayer {
         didSet {
-            self.setupPlayer()
+            if Thread.isMainThread {
+                MainActor.assumeIsolated { self.setupPlayer() }
+            } else {
+                DispatchQueue.main.async { self.setupPlayer() }
+            }
         }
     }
     @objc dynamic public var videoMode:VideoMode = .origin {
@@ -197,7 +203,7 @@ public class IPaVRVideoScene: IPaVRScene {
         }
     }
     
-    public init(_ avPlayer:IPaAVPlayer) {
+    @MainActor public init(_ avPlayer:IPaAVPlayer) {
         self.avPlayer = avPlayer
         super.init()
         self.setupPlayer()
@@ -222,15 +228,17 @@ public class IPaVRVideoScene: IPaVRScene {
         currentProjection.attach(self, camera: vrLCamera)
         currentProjection.attach(self, camera: vrRCamera)
     }
-    func setupPlayer() {
-        self.videoSizeAnyCancellable = avPlayer.publisher(for: \.avPlayer.currentItem?.presentationSize,options: [.initial,.new]).sink(receiveValue: { size in
+    @MainActor func setupPlayer() {
+        self.videoSizeAnyCancellable = avPlayer.publisher(for: \.avPlayer.currentItem?.presentationSize,options: [.initial,.new]).sink(receiveValue: { [weak self] size in
+            guard let self else { return }
             var newSize = size ?? CGSize(width: 1, height: 1)
             if newSize.equalTo(.zero) {
                 newSize = CGSize(width: 1, height: 1)
             }
             self.videoSize = newSize
         })
-        self.playerAnyCancellable = avPlayer.publisher(for: \.avPlayer,options: [.initial,.new]).sink(receiveValue: { player in
+        self.playerAnyCancellable = avPlayer.publisher(for: \.avPlayer,options: [.initial,.new]).sink(receiveValue: { [weak self] player in
+            guard let self else { return }
             self.vrLCamera.spriteVideoNode = SKVideoNode(avPlayer: player)
             self.vrRCamera.spriteVideoNode = SKVideoNode(avPlayer: player)
             self.reattachProjection()

@@ -24,7 +24,8 @@ class IPaVRVideoCamera: NSObject {
     weak var view:SCNView? {
         didSet {
             if let view = view,let scene = scene {
-                self.viewBoundsAnyCancellable = view.publisher(for: \.bounds,options: [.new]).sink(receiveValue: { bounds in
+                self.viewBoundsAnyCancellable = view.publisher(for: \.bounds,options: [.new]).sink(receiveValue: { [weak self, weak scene] bounds in
+                    guard let self, let scene else { return }
                     scene.currentProjection.attach(scene, camera: self)
                 })
             }

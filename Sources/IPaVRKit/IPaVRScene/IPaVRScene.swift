@@ -15,7 +15,8 @@ public class IPaVRScene:NSObject {
         }
         return super.keyPathsForValuesAffectingValue(forKey: key)
     }
-    var _view:IPaVRView?
+    /// Weak: the view owns its scene (`IPaVRView.vrScene`).
+    weak var _view:IPaVRView?
     @objc public dynamic var view:IPaVRView? {
         return _view
     }

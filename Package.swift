@@ -17,7 +17,7 @@ let package = Package(
     dependencies: [
         // Dependencies declare other packages that this package depends on.
         // .package(url: /* package url */, from: "1.0.0"),
-        .package(url: "https://github.com/ipapamagic/IPaAVPlayer.git", from: "3.0.0"),
+        .package(url: "https://github.com/ipapamagic/IPaAVPlayer.git", from: "4.0.0"),
         .package(url: "https://github.com/ipapamagic/IPaImageTool.git", from: "2.6.0"),
     ],
     targets: [
@@ -31,6 +31,9 @@ let package = Package(
             ]),
         .testTarget(
             name: "IPaVRKitTests",
-            dependencies: ["IPaVRKit"]),
+            dependencies: [
+                "IPaVRKit",
+                .product(name: "IPaAVPlayer", package: "IPaAVPlayer"),
+            ]),
     ]
 )
