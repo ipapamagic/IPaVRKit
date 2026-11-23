@@ -31,6 +31,7 @@ public final class IPaVisionImmersiveScene {
     @ObservationIgnored private var videoEntity: Entity?
     @ObservationIgnored private var shellEntity: Entity?
     @ObservationIgnored private var hudEntity: Entity?
+    @ObservationIgnored private var monoNoticeEntity: Entity?
     @ObservationIgnored private var appliedKey: GeometryKey?
     @ObservationIgnored private var scrub: IPaVisionScrubCoordinator?
     @ObservationIgnored private var scrubStart: SIMD3<Float>?
@@ -53,14 +54,18 @@ public final class IPaVisionImmersiveScene {
     /// Shows `player` per `metadata` + `correction`. Cheap when only the
     /// orientation changed.
     public func apply(player: AVPlayer, metadata: IPaVisionSourceMetadata, correction rawCorrection: IPaVisionCorrection) {
-        let correction = rawCorrection.clamped()
-        let plan = IPaVisionRenderPlan.make(metadata: metadata, correction: correction)
+        let plan = IPaVisionRenderPlan.make(metadata: metadata, correction: rawCorrection)
+        // What is actually rendered: controls the plan ignores (convergence,
+        // eye swap on a mono layout) neither rebuild nor re-orient anything.
+        let correction = plan.correction
         var geometryOnly = correction
         geometryOnly.yaw = 0
         geometryOnly.pitch = 0
         geometryOnly.roll = 0
         geometryOnly.horizonLock = false
-        let key = GeometryKey(player: ObjectIdentifier(player), plan: plan, correction: geometryOnly,
+        var geometryPlan = plan
+        geometryPlan.correction = geometryOnly
+        let key = GeometryKey(player: ObjectIdentifier(player), plan: geometryPlan, correction: geometryOnly,
                               aspect: metadata.frameAspectRatio)
         if key != appliedKey {
             do {
@@ -79,6 +84,7 @@ public final class IPaVisionImmersiveScene {
             videoEntity?.orientation = IPaVisionGeometry.orientation(for: correction)
         }
         self.plan = plan
+        refreshMonoNotice()
     }
 
     /// Adds the indirect-only input shell (once).
@@ -102,6 +108,25 @@ public final class IPaVisionImmersiveScene {
         entity.isEnabled = false
         root.addChild(entity)
         hudEntity = entity
+    }
+
+    /// Places the "shown in mono" badge; visible only while the plan is a
+    /// mono downgrade of a stereo source.
+    public func attachMonoNotice(_ entity: Entity) {
+        guard monoNoticeEntity !== entity else { return }
+        monoNoticeEntity?.removeFromParent()
+        entity.components.set(BillboardComponent())
+        entity.position = SIMD3(0, -0.45, -1.2)
+        root.addChild(entity)
+        monoNoticeEntity = entity
+        refreshMonoNotice()
+    }
+
+    /// True while the current plan draws a stereo source mono.
+    public var showsMonoDowngrade: Bool { plan?.isMonoDowngrade ?? false }
+
+    private func refreshMonoNotice() {
+        monoNoticeEntity?.isEnabled = showsMonoDowngrade
     }
 
     // MARK: Scrubbing
@@ -134,6 +159,26 @@ public final class IPaVisionImmersiveScene {
     public func scrubCancelled() {
         scrubStart = nil
         scrub?.cancel()
+    }
+
+    /// The gesture's state was reset (ended *or* cancelled by the system).
+    /// `onEnded` runs around the same time; wait a turn so a normal end is
+    /// handled as an end, and only an unfinished scrub is cancelled.
+    public func scrubGestureReset() {
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self else { return }
+            self.scrubStart = nil
+            self.scrub?.gestureDidReset()
+        }
+    }
+
+    /// The immersive view disappeared: never leave a scrub (and the pause it
+    /// started) behind.
+    public func tearDown() {
+        scrubStart = nil
+        unavailableHide?.cancel()
+        scrub?.tearDown()
     }
 
     private func scrubStateChanged(_ state: IPaVisionScrubCoordinator.State) {

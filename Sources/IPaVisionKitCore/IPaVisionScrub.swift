@@ -228,6 +228,25 @@ public final class IPaVisionScrubCoordinator {
         }
     }
 
+    /// The drag gesture stopped without a normal end: the system cancelled
+    /// it, or `end()` never arrived. A scrub still in progress is cancelled
+    /// (back to its start, playback state restored); anything else is left
+    /// alone, so calling this after `end()` is harmless.
+    @discardableResult
+    public func gestureDidReset() -> Task<Void, Never>? {
+        switch state {
+        case .scrubbing, .unavailable: return cancel()
+        case .idle, .settling: return nil
+        }
+    }
+
+    /// The owning view is going away. Same as `gestureDidReset()`; a release
+    /// already settling still finishes and restores playback on its own.
+    @discardableResult
+    public func tearDown() -> Task<Void, Never>? {
+        gestureDidReset()
+    }
+
     private func settle(at target: Double, duration: Double) -> Task<Void, Never>? {
         guard let controller else { state = .idle; return nil }
         generation &+= 1
@@ -236,9 +255,14 @@ public final class IPaVisionScrubCoordinator {
         state = .settling(target: target, duration: duration)
         return Task { [weak self] in
             _ = await controller.seek(to: target, precision: .exact)
-            guard let self, self.generation == current else { return }
+            // A newer drag owns playback now; it will restore it itself.
+            if let self {
+                guard self.generation == current else { return }
+                self.state = .idle
+            }
+            // Resume even if this coordinator (its view) is already gone:
+            // a scrub must never leave playback paused for good.
             if resume { controller.play() }
-            self.state = .idle
         }
     }
 }

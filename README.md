@@ -22,10 +22,18 @@ pause and seek goes through `IPaVisionPlaybackControlling`, implemented by the h
 - `IPaVisionCorrection.automatic` → **system** backend: `VideoPlayerComponent`. Tagged
   APMP 180/360 uses `desiredImmersiveViewingMode = .full`, everything else `.portal`
   on a 3 m screen 4 m ahead. The system reads the asset's tags itself (incl. stereo).
-- Any manual correction → **custom mono** backend: mesh from `IPaVisionGeometry`
+- Controls the plan cannot apply are dropped before choosing a backend: convergence
+  (needs a per-eye renderer) and, unless the layout is frame-packed, eye swap / split
+  ratio. A correction made only of those keeps the system renderer
+  (`.convergenceIgnored` / `.packingControlsIgnored`), so it never silently turns a
+  stereo or MV-HEVC source mono. `plan.correction` is what is actually rendered.
+- Any other manual correction → **custom mono** backend: mesh from `IPaVisionGeometry`
   (flat plane, 180° hemisphere or 360° sphere, inward-facing) with `VideoMaterial`.
   A packed stereo frame is split by `splitRatio`, `swapsEyes` picks the view, and that
-  one view is shown to both eyes (`plan.stereoShownAsMono`).
+  one view is shown to both eyes. An MV-HEVC source also gets only its primary view
+  (`.multiviewShownAsMono`). Either way `plan.isMonoDowngrade` is true and
+  `IPaVisionImmersivePlayerView` shows `monoDowngradeMessage` in the space for as long
+  as it lasts; hosts should say so in their own UI too.
 - **custom stereo**: not implemented — `IPaVisionCustomStereoBackend.status` is
   `.unsupported`. See [docs/PHASE0.md](docs/PHASE0.md).
 
@@ -46,6 +54,10 @@ an indirect pinch-and-drag anywhere is a horizontal scrub, independent of gaze t
 - pauses during the drag, issues throttled (150 ms) `.fast` seeks, then one `.exact`
   seek on release, and resumes only if playback was running when the drag began;
 - shows target time and progress in a billboarded attachment while scrubbing.
+- a gesture the system cancels (no `onEnded`) is detected through `@GestureState`
+  reset and cancelled (`gestureDidReset()`: back to the start position, playing state
+  restored); the view's `onDisappear` tears down an unfinished scrub the same way; a
+  release that is still settling resumes playback even if its view is already gone.
 
 No system overlays are hidden, and the Digital Crown is not used.
 

@@ -145,8 +145,66 @@ final class IPaVisionRenderPlanTests: XCTestCase {
     func testMultiviewRendersPrimaryViewMono() {
         let plan = IPaVisionRenderPlan.make(metadata: Meta(projection: .rectilinear, packing: .multiview),
                                             correction: IPaVisionCorrection(zoom: 1.2))
+        XCTAssertEqual(plan.backend, .customMono)
         XCTAssertEqual(plan.stereoLayout, .mono)
-        XCTAssertFalse(plan.stereoShownAsMono)
+        // Manual correction of MV-HEVC: one decoded view → must be flagged.
+        XCTAssertTrue(plan.stereoShownAsMono)
+        XCTAssertTrue(plan.isMonoDowngrade)
+        XCTAssertEqual(plan.notes, [.multiviewShownAsMono])
+    }
+
+    // MARK: Ineffective controls never downgrade silently
+
+    func testConvergenceAloneKeepsTheSystemRenderer() {
+        for meta in [Meta(projection: .rectilinear, packing: .multiview),
+                     Meta(projection: .halfEquirectangular, packing: .sideBySide),
+                     Meta(projection: .rectilinear)] {
+            let plan = IPaVisionRenderPlan.make(metadata: meta, correction: IPaVisionCorrection(convergence: 2))
+            XCTAssertEqual(plan.backend, .system, "\(meta)")
+            XCTAssertFalse(plan.isMonoDowngrade)
+            XCTAssertEqual(plan.notes, [.convergenceIgnored])
+            XCTAssertEqual(plan.correction.convergence, 0)
+        }
+    }
+
+    func testEyeSwapOnAMonoOrMultiviewLayoutIsIgnored() {
+        for meta in [Meta(projection: .rectilinear, packing: .multiview), Meta(projection: .equirectangular)] {
+            let plan = IPaVisionRenderPlan.make(metadata: meta,
+                                                correction: IPaVisionCorrection(swapsEyes: true, splitRatio: 0.6))
+            XCTAssertEqual(plan.backend, .system, "\(meta)")
+            XCTAssertFalse(plan.isMonoDowngrade)
+            XCTAssertEqual(plan.notes, [.packingControlsIgnored])
+        }
+        // Convergence + swap together on MV-HEVC: still the system renderer.
+        let both = IPaVisionRenderPlan.make(metadata: Meta(projection: .rectilinear, packing: .multiview),
+                                            correction: IPaVisionCorrection(swapsEyes: true, convergence: -1))
+        XCTAssertEqual(both.backend, .system)
+        XCTAssertEqual(both.notes, [.convergenceIgnored, .packingControlsIgnored])
+    }
+
+    func testEyeSwapOnAPackedLayoutIsAnExplicitMonoDowngrade() {
+        let plan = IPaVisionRenderPlan.make(metadata: Meta(projection: .halfEquirectangular, packing: .sideBySide),
+                                            correction: IPaVisionCorrection(swapsEyes: true))
+        XCTAssertEqual(plan.backend, .customMono)
+        XCTAssertTrue(plan.isMonoDowngrade)
+        XCTAssertEqual(plan.notes, [.customStereoUnavailable])
+        XCTAssertEqual(plan.sourceRegion, IPaVisionRect(x: 0.5, y: 0, width: 0.5, height: 1))
+    }
+
+    func testIgnoredControlsAreDroppedFromAnEffectiveCorrection() {
+        let plan = IPaVisionRenderPlan.make(metadata: Meta(projection: .rectilinear, packing: .multiview),
+                                            correction: IPaVisionCorrection(swapsEyes: true, yaw: 20, convergence: 3))
+        XCTAssertEqual(plan.backend, .customMono)
+        XCTAssertEqual(plan.correction, IPaVisionCorrection(yaw: 20))
+        XCTAssertEqual(plan.notes, [.convergenceIgnored, .packingControlsIgnored, .multiviewShownAsMono])
+        XCTAssertTrue(plan.isMonoDowngrade)
+    }
+
+    func testMonoSourceWithManualCorrectionIsNotADowngrade() {
+        let plan = IPaVisionRenderPlan.make(metadata: Meta(projection: .rectilinear),
+                                            correction: IPaVisionCorrection(projection: .equirectangular180))
+        XCTAssertEqual(plan.backend, .customMono)
+        XCTAssertFalse(plan.isMonoDowngrade)
     }
 
     func testAvailableStereoBackendDropsTheNote() {

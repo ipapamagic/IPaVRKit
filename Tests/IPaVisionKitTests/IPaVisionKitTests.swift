@@ -126,5 +126,90 @@ final class IPaVisionKitTests: XCTestCase {
         XCTAssertEqual(IPaVisionTimeFormat.string(3725), "1:02:05")
         XCTAssertEqual(IPaVisionTimeFormat.string(.nan), "--:--")
     }
+
+    // MARK: Mono downgrade notice
+
+    func testMonoNoticeFollowsThePlan() {
+        let scene = IPaVisionImmersiveScene()
+        let notice = Entity()
+        scene.attachMonoNotice(notice)
+        let mvHEVC = IPaVisionSourceMetadata(projection: .rectilinear, packing: .multiview)
+        scene.apply(player: player, metadata: mvHEVC, correction: IPaVisionCorrection(yaw: 10))
+        XCTAssertEqual(scene.plan?.backend, .customMono)
+        XCTAssertTrue(scene.showsMonoDowngrade)
+        XCTAssertTrue(notice.isEnabled)
+        // Convergence alone: stays on the system renderer, no downgrade, no notice.
+        scene.apply(player: player, metadata: mvHEVC, correction: IPaVisionCorrection(convergence: 2))
+        XCTAssertEqual(scene.plan?.backend, .system)
+        XCTAssertFalse(notice.isEnabled)
+    }
+
+    func testIgnoredControlsDoNotRebuildTheVideoEntity() throws {
+        let scene = IPaVisionImmersiveScene()
+        let mvHEVC = IPaVisionSourceMetadata(projection: .rectilinear, packing: .multiview)
+        scene.apply(player: player, metadata: mvHEVC, correction: .automatic)
+        let first = try XCTUnwrap(scene.root.children.first)
+        scene.apply(player: player, metadata: mvHEVC, correction: IPaVisionCorrection(swapsEyes: true, convergence: 1))
+        XCTAssertEqual(scene.plan?.backend, .system)
+        XCTAssertTrue(first.components.has(VideoPlayerComponent.self))
+    }
+
+    // MARK: Scrub cleanup
+
+    private func waitUntil(_ condition: @MainActor () -> Bool) async {
+        let deadline = Date().addingTimeInterval(2)
+        while !condition(), Date() < deadline { try? await Task.sleep(for: .milliseconds(10)) }
+    }
+
+    func testViewTearDownMidScrubRestoresPlayback() async {
+        let transport = VisionFakeTransport()
+        let scene = IPaVisionImmersiveScene()
+        scene.bind(controller: transport)
+        scene.scrubChanged(startLocation: [0, 1.5, -2], translation: [0.2, 0, 0])
+        XCTAssertFalse(transport.isPlaying)
+        scene.tearDown()
+        await waitUntil { transport.isPlaying }
+        XCTAssertTrue(transport.isPlaying)
+        XCTAssertEqual(transport.lastSeek, 100)          // back to where the drag began
+        XCTAssertEqual(scene.scrubState, .idle)
+    }
+
+    func testCancelledGestureWithoutOnEndedRestoresPlayback() async {
+        let transport = VisionFakeTransport()
+        let scene = IPaVisionImmersiveScene()
+        scene.bind(controller: transport)
+        scene.scrubChanged(startLocation: [0, 1.5, -2], translation: [0.2, 0, 0])
+        scene.scrubGestureReset()                        // system cancel: no scrubEnded()
+        await waitUntil { transport.isPlaying && scene.scrubState == .idle }
+        XCTAssertTrue(transport.isPlaying)
+        XCTAssertEqual(scene.scrubState, .idle)
+    }
+
+    func testNormalEndFollowedByGestureResetKeepsTheTarget() async {
+        let transport = VisionFakeTransport()
+        let scene = IPaVisionImmersiveScene()
+        scene.bind(controller: transport)
+        scene.scrubChanged(startLocation: [0, 1.5, -2], translation: [0.2, 0, 0])
+        scene.scrubEnded()
+        scene.scrubGestureReset()
+        await waitUntil { transport.isPlaying && scene.scrubState == .idle }
+        XCTAssertTrue(transport.isPlaying)
+        XCTAssertNotEqual(transport.lastSeek, 100)       // not cancelled back to the start
+    }
+}
+
+@MainActor
+private final class VisionFakeTransport: IPaVisionPlaybackControlling {
+    var currentTime: Double = 100
+    var isPlaying = true
+    var seekableRange: IPaVisionSeekableRange = .vod(duration: 600)
+    var lastSeek: Double?
+    func play() { isPlaying = true }
+    func pause() { isPlaying = false }
+    func seek(to seconds: Double, precision: IPaVisionSeekPrecision) async -> Bool {
+        lastSeek = seconds
+        currentTime = seconds
+        return true
+    }
 }
 #endif

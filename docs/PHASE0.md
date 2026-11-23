@@ -19,3 +19,14 @@
 5. The same `AVPlayer` drawn by `AVPlayerViewController` (window) and the immersive
    entity at once.
 6. Camera Index Switch + `AVPlayerVideoOutput` coexistence before any custom stereo.
+
+## Demo-safety fixes (2026-11-23)
+
+- MV-HEVC + manual correction → custom mono now reports `.multiviewShownAsMono` /
+  `isMonoDowngrade`, and the immersive view shows a persistent mono badge.
+  Convergence alone, and eye swap / split ratio on a non-packed layout, never leave
+  the system renderer.
+- Scrub cleanup on system-cancelled gestures and on view disappearance (tests:
+  `IPaVisionScrubTests` cancellation group, `IPaVisionKitTests` scrub cleanup group).
+  Not proved on device: that visionOS actually resets `@GestureState` for an indirect
+  pinch the system cancels (e.g. a system overlay taking the hand).

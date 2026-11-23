@@ -146,4 +146,76 @@ final class IPaVisionScrubTests: XCTestCase {
         await scrub.end()?.value
         XCTAssertTrue(transport.isPlaying)      // the original drag started while playing
     }
+
+    // MARK: Cancellation / teardown never leave playback paused
+
+    func testSystemCancelledGestureRestoresPositionAndPlayback() async {
+        let transport = FakeTransport()
+        transport.currentTime = 50
+        transport.isPlaying = true
+        let scrub = IPaVisionScrubCoordinator(controller: transport)
+        scrub.begin()
+        await scrub.update(horizontalMetres: 0.3)?.value
+        XCTAssertFalse(transport.isPlaying)
+        await scrub.gestureDidReset()?.value          // no onEnded: the system cancelled
+        XCTAssertEqual(transport.seeks.last?.0, 50)
+        XCTAssertEqual(transport.seeks.last?.1, .exact)
+        XCTAssertTrue(transport.isPlaying)
+        XCTAssertEqual(scrub.state, .idle)
+    }
+
+    func testGestureResetAfterANormalEndDoesNothing() async {
+        let transport = FakeTransport()
+        transport.isPlaying = true
+        let scrub = IPaVisionScrubCoordinator(controller: transport)
+        scrub.begin()
+        scrub.update(horizontalMetres: 0.2)
+        let settle = scrub.end()
+        XCTAssertNil(scrub.gestureDidReset())         // settling: left alone
+        await settle?.value
+        XCTAssertNil(scrub.gestureDidReset())         // idle: nothing to do
+        XCTAssertEqual(transport.seeks.filter { $0.1 == .exact }.count, 1)
+        XCTAssertTrue(transport.isPlaying)
+    }
+
+    func testGestureResetOnLiveClearsTheUnavailableState() {
+        let transport = FakeTransport()
+        transport.isPlaying = true
+        transport.seekableRange = .live
+        let scrub = IPaVisionScrubCoordinator(controller: transport)
+        scrub.begin()
+        XCTAssertNil(scrub.gestureDidReset())
+        XCTAssertEqual(scrub.state, .idle)
+        XCTAssertTrue(transport.calls.isEmpty)
+    }
+
+    func testTearDownMidScrubResumesPlayback() async {
+        let transport = FakeTransport()
+        transport.isPlaying = true
+        let scrub = IPaVisionScrubCoordinator(controller: transport)
+        scrub.begin()
+        await scrub.tearDown()?.value
+        XCTAssertTrue(transport.isPlaying)
+        XCTAssertEqual(scrub.state, .idle)
+    }
+
+    func testPlaybackResumesEvenIfTheCoordinatorIsGoneBeforeTheSeekLands() async {
+        let transport = FakeTransport()
+        transport.isPlaying = true
+        var scrub: IPaVisionScrubCoordinator? = IPaVisionScrubCoordinator(controller: transport)
+        scrub?.begin()
+        let settle = scrub?.end()
+        scrub = nil                                   // view torn down mid-settle
+        await settle?.value
+        XCTAssertTrue(transport.isPlaying, "a scrub left playback paused for good")
+    }
+
+    func testTearDownOfAPausedScrubKeepsItPaused() async {
+        let transport = FakeTransport()
+        let scrub = IPaVisionScrubCoordinator(controller: transport)
+        scrub.begin()
+        await scrub.tearDown()?.value
+        XCTAssertFalse(transport.isPlaying)
+        XCTAssertFalse(transport.calls.contains("play"))
+    }
 }

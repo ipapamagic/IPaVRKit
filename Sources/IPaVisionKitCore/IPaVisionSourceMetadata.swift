@@ -146,11 +146,15 @@ public struct IPaVisionRenderPlan: Equatable, Sendable {
     /// The source frame region, in image coordinates (origin top-left, y down,
     /// 0...1), that the custom renderer samples.
     public var sourceRegion: IPaVisionRect
-    /// The correction carries stereo, but only mono rendering is available, so
-    /// one eye is shown to both eyes.
+    /// The source (or the correction) is stereo, but this plan draws it with
+    /// the mono renderer: both eyes see the same single view. Hosts must say
+    /// so on screen whenever this is true.
     public var stereoShownAsMono: Bool
-    /// Why `.customMono` could not render what was asked, if anything.
+    /// What was asked for but isn't rendered, or how the plan deviates.
     public var notes: [Note]
+    /// The correction actually rendered: the input, clamped, with controls the
+    /// plan cannot apply reset to their defaults (see `Note`).
+    public var correction: IPaVisionCorrection
 
     public enum Note: Equatable, Sendable {
         /// Custom stereo has no proven backend (see `IPaVisionStereoBackend`).
@@ -158,10 +162,29 @@ public struct IPaVisionRenderPlan: Equatable, Sendable {
         /// The file's projection can't be re-mapped by the custom renderer;
         /// it falls back to the chosen / flat geometry.
         case unsupportedSourceProjection
+        /// An MV-HEVC (multiview) source is drawn by the custom renderer, which
+        /// only receives its primary view: the stereo source is shown mono.
+        case multiviewShownAsMono
+        /// Convergence needs a per-eye renderer. It is ignored and, on its own,
+        /// never moves playback off the system renderer.
+        case convergenceIgnored
+        /// Eye swap / split ratio only apply to a frame-packed (side-by-side /
+        /// over-under) layout. With a mono or multiview layout they are ignored
+        /// and, on their own, never move playback off the system renderer.
+        case packingControlsIgnored
     }
 
-    /// Decides the backend: the system renderer whenever the correction is
-    /// automatic, the custom mono renderer otherwise.
+    /// Mono rendering of a stereo source: the host must show this.
+    public var isMonoDowngrade: Bool { stereoShownAsMono }
+
+    /// Decides the backend: the system renderer whenever the *effective*
+    /// correction is automatic, the custom mono renderer otherwise.
+    ///
+    /// The effective correction drops controls this plan cannot apply:
+    /// convergence (no per-eye renderer) and, unless the resolved layout is
+    /// frame-packed, eye swap and split ratio. So a correction made only of
+    /// those never downgrades a stereo / MV-HEVC source to mono; the plan keeps
+    /// the system renderer and reports them as ignored.
     ///
     /// Automatic + tagged non-rectilinear media (Apple Immersive, parametric,
     /// unnamed kinds) stays `.systemImmersive`. It is never flattened, so the
@@ -169,8 +192,20 @@ public struct IPaVisionRenderPlan: Equatable, Sendable {
     public static func make(metadata: IPaVisionSourceMetadata,
                             correction rawCorrection: IPaVisionCorrection,
                             stereoBackend: IPaVisionStereoBackend = .current) -> IPaVisionRenderPlan {
-        let correction = rawCorrection.clamped()
+        var correction = rawCorrection.clamped()
         let layout = resolvedLayout(metadata: metadata, correction: correction)
+        let isPacked = layout == .sideBySide || layout == .overUnder
+        var notes: [Note] = []
+        let defaults = IPaVisionCorrection.automatic
+        if correction.convergence != defaults.convergence {
+            correction.convergence = defaults.convergence
+            notes.append(.convergenceIgnored)
+        }
+        if !isPacked, correction.swapsEyes != defaults.swapsEyes || correction.splitRatio != defaults.splitRatio {
+            correction.swapsEyes = defaults.swapsEyes
+            correction.splitRatio = defaults.splitRatio
+            notes.append(.packingControlsIgnored)
+        }
 
         if correction.isAutomatic {
             return IPaVisionRenderPlan(backend: .system,
@@ -178,19 +213,22 @@ public struct IPaVisionRenderPlan: Equatable, Sendable {
                                        stereoLayout: layout,
                                        sourceRegion: .unit,
                                        stereoShownAsMono: false,
-                                       notes: [])
+                                       notes: notes,
+                                       correction: correction)
         }
         let (projection, projectionNote) = resolvedProjection(metadata: metadata, correction: correction)
-        var notes: [Note] = []
         if let projectionNote { notes.append(projectionNote) }
-        let isStereo = layout == .sideBySide || layout == .overUnder
-        if isStereo, !stereoBackend.isAvailable { notes.append(.customStereoUnavailable) }
+        if isPacked, !stereoBackend.isAvailable { notes.append(.customStereoUnavailable) }
+        // The custom renderer gets one decoded view of an MV-HEVC source.
+        let multiviewAsMono = !isPacked && metadata.packing == .multiview
+        if multiviewAsMono { notes.append(.multiviewShownAsMono) }
         return IPaVisionRenderPlan(backend: .customMono,
                                    projection: projection,
                                    stereoLayout: layout,
                                    sourceRegion: sourceRegion(layout: layout, correction: correction, eye: .left),
-                                   stereoShownAsMono: isStereo,
-                                   notes: notes)
+                                   stereoShownAsMono: isPacked || multiviewAsMono,
+                                   notes: notes,
+                                   correction: correction)
     }
 
     static func resolvedLayout(metadata: IPaVisionSourceMetadata,
