@@ -40,6 +40,8 @@ public enum IPaVisionGeometry {
     public static func defaultFieldOfView(for projection: IPaVisionRenderPlan.Projection) -> Double {
         switch projection {
         case .flat: return 60
+        // Informational only: the system draws these from the asset's tags.
+        case .systemImmersive: return 180
         case .equirectangular360: return 360
         case .equirectangular180: return 180
         }
@@ -62,19 +64,19 @@ public enum IPaVisionGeometry {
                               correction rawCorrection: IPaVisionCorrection,
                               frameAspectRatio: Double?) -> Layout {
         let c = rawCorrection.clamped()
-        let fov = c.fieldOfView ?? defaultFieldOfView(for: plan.projection)
+        let fov = c.fieldOfView ?? defaultFieldOfView(for: plan.projection.customGeometry)
         let magnified = fov * c.zoom
         let horizontalCap: Double
         let verticalNative: Double
         let verticalCap: Double
-        switch plan.projection {
+        switch plan.projection.customGeometry {
         case .equirectangular360, .equirectangular180:
             horizontalCap = 360
             verticalCap = 180
             // Equirectangular: the eye image spans 2:1 (360) or 1:1 (180)
             // degrees by definition.
-            verticalNative = plan.projection == .equirectangular360 ? magnified / 2 : magnified
-        case .flat:
+            verticalNative = plan.projection.customGeometry == .equirectangular360 ? magnified / 2 : magnified
+        case .flat, .systemImmersive:   // `customGeometry` never yields .systemImmersive
             horizontalCap = flatMaxAngle
             verticalCap = flatMaxAngle
             let aspect = eyeAspectRatio(region: plan.sourceRegion, frameAspectRatio: frameAspectRatio)
@@ -86,7 +88,7 @@ public enum IPaVisionGeometry {
         let vertical = min(verticalNative, verticalCap)
         let shownWidth: Double
         let shownHeight: Double
-        if plan.projection == .flat {
+        if plan.projection.customGeometry == .flat {
             shownWidth = magnified > horizontalCap
                 ? tan(radians(horizontal / 2)) / tan(radians(min(magnified, 179) / 2)) : 1
             shownHeight = verticalNative > verticalCap
@@ -115,8 +117,8 @@ public enum IPaVisionGeometry {
                             frameAspectRatio: Double? = nil,
                             segments: Int = 64) -> IPaVisionMeshData {
         let layout = layout(plan: plan, correction: correction, frameAspectRatio: frameAspectRatio)
-        let columns = max(1, plan.projection == .flat ? 1 : segments)
-        let rows = max(1, plan.projection == .flat ? 1 : segments / 2)
+        let columns = max(1, plan.projection.customGeometry == .flat ? 1 : segments)
+        let rows = max(1, plan.projection.customGeometry == .flat ? 1 : segments / 2)
         let region = plan.sourceRegion
         var positions: [SIMD3<Float>] = []
         var uvs: [SIMD2<Float>] = []
@@ -130,8 +132,8 @@ public enum IPaVisionGeometry {
             let wy = Double(j) / Double(rows)          // 0 = top
             for i in 0...columns {
                 let wx = Double(i) / Double(columns)   // 0 = left
-                switch plan.projection {
-                case .flat:
+                switch plan.projection.customGeometry {
+                case .flat, .systemImmersive:
                     positions.append(SIMD3(Float((wx - 0.5) * 2 * flatHalfWidth),
                                            Float((0.5 - wy) * 2 * flatHalfHeight),
                                            -flatDistance))

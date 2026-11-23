@@ -19,8 +19,13 @@ final class IPaVisionRenderPlanTests: XCTestCase {
         // MV-HEVC wins over a packing tag.
         XCTAssertEqual(Meta.classify(projectionKinds: [], packingKinds: [Value.sideBySide],
                                      isMultiview: true, flaggedNonRectilinear: false).packing, .multiview)
+        // Known immersive kinds are named explicitly.
+        XCTAssertEqual(Meta.classify(projectionKinds: [Value.parametricImmersive], packingKinds: [],
+                                     isMultiview: false, flaggedNonRectilinear: false).projection, .parametricImmersive)
+        XCTAssertEqual(Meta.classify(projectionKinds: [Value.appleImmersiveVideo], packingKinds: [],
+                                     isMultiview: false, flaggedNonRectilinear: true).projection, .appleImmersive)
         // A kind this build doesn't know is still not flat.
-        XCTAssertEqual(Meta.classify(projectionKinds: ["ParametricImmersive"], packingKinds: [],
+        XCTAssertEqual(Meta.classify(projectionKinds: ["SomeFutureKind"], packingKinds: [],
                                      isMultiview: false, flaggedNonRectilinear: false).projection, .otherNonRectilinear)
         XCTAssertEqual(Meta.classify(projectionKinds: [], packingKinds: [], isMultiview: false,
                                      flaggedNonRectilinear: true).projection, .otherNonRectilinear)
@@ -67,6 +72,67 @@ final class IPaVisionRenderPlanTests: XCTestCase {
         XCTAssertTrue(plan.stereoShownAsMono)
         XCTAssertEqual(plan.notes, [.customStereoUnavailable])
         XCTAssertEqual(plan.sourceRegion, IPaVisionRect(x: 0, y: 0, width: 1, height: 0.5))
+    }
+
+    // MARK: Automatic routes (system renderer)
+
+    /// Regression: automatic Apple Immersive / parametric / unnamed
+    /// non-rectilinear media used to be planned `.flat`, which the renderer
+    /// shows in a portal. It must stay a distinct immersive projection.
+    func testAutomaticSystemOnlyImmersiveIsNeverFlattened() {
+        for projection: Meta.Projection in [.appleImmersive, .parametricImmersive, .otherNonRectilinear] {
+            for packing: Meta.Packing in [.mono, .multiview, .sideBySide] {
+                let plan = IPaVisionRenderPlan.make(metadata: Meta(projection: projection, packing: packing),
+                                                    correction: .automatic)
+                XCTAssertEqual(plan.backend, .system, "\(projection)")
+                XCTAssertEqual(plan.projection, .systemImmersive, "\(projection) \(packing) was flattened")
+                XCTAssertEqual(plan.notes, [])
+                XCTAssertTrue(projection.isSystemOnlyImmersive)
+            }
+        }
+    }
+
+    func testAutomaticRoutesPerProjection() {
+        let expected: [(Meta.Projection?, IPaVisionRenderPlan.Projection)] = [
+            (.equirectangular, .equirectangular360),
+            (.halfEquirectangular, .equirectangular180),
+            (.appleImmersive, .systemImmersive),
+            (.parametricImmersive, .systemImmersive),
+            (.otherNonRectilinear, .systemImmersive),
+            (.rectilinear, .flat),
+            (nil, .flat),
+        ]
+        for (source, planned) in expected {
+            let plan = IPaVisionRenderPlan.make(metadata: Meta(projection: source), correction: .automatic)
+            XCTAssertEqual(plan.projection, planned, "\(String(describing: source))")
+        }
+    }
+
+    func testClassifiedAppleAndParametricTagsRouteToSystemImmersive() {
+        for kind in [Value.appleImmersiveVideo, Value.parametricImmersive] {
+            let meta = Meta.classify(projectionKinds: [kind], packingKinds: [], isMultiview: false,
+                                     flaggedNonRectilinear: true)
+            XCTAssertEqual(IPaVisionRenderPlan.make(metadata: meta, correction: .automatic).projection,
+                           .systemImmersive, kind)
+        }
+    }
+
+    func testSystemImmersiveHasNoCustomGeometry() {
+        XCTAssertEqual(IPaVisionRenderPlan.Projection.systemImmersive.customGeometry, .flat)
+        XCTAssertEqual(IPaVisionRenderPlan.Projection.equirectangular360.customGeometry, .equirectangular360)
+        XCTAssertEqual(IPaVisionRenderPlan.Projection.equirectangular180.customGeometry, .equirectangular180)
+    }
+
+    // MARK: Manual corrections (custom renderer)
+
+    func testManualCorrectionOfSystemOnlyImmersiveFallsBackWithNote() {
+        for projection: Meta.Projection in [.appleImmersive, .parametricImmersive] {
+            let plan = IPaVisionRenderPlan.make(metadata: Meta(projection: projection),
+                                                correction: IPaVisionCorrection(zoom: 1.5))
+            XCTAssertEqual(plan.backend, .customMono)
+            XCTAssertEqual(plan.projection, .flat)
+            XCTAssertEqual(plan.notes, [.unsupportedSourceProjection])
+        }
     }
 
     func testUnmappableProjectionIsNoted() {

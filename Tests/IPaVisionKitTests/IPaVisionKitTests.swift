@@ -25,6 +25,51 @@ final class IPaVisionKitTests: XCTestCase {
         XCTAssertNil(entity.components[ModelComponent.self])
     }
 
+    /// Regression: automatic Apple Immersive / parametric media must be
+    /// presented `.full`, never in a portal.
+    func testAutomaticAppleAndParametricImmersiveUseFull() throws {
+        for projection: IPaVisionSourceMetadata.Projection in [.appleImmersive, .parametricImmersive, .otherNonRectilinear] {
+            let plan = IPaVisionRenderPlan.make(metadata: .init(projection: projection), correction: .automatic)
+            XCTAssertEqual(plan.projection, .systemImmersive)
+            let entity = try IPaVisionRenderer.makeVideoEntity(plan: plan, player: player, correction: .automatic,
+                                                               frameAspectRatio: nil)
+            let component = try XCTUnwrap(entity.components[VideoPlayerComponent.self], "\(projection)")
+            XCTAssertEqual(component.desiredImmersiveViewingMode, .full, "\(projection) went to a portal")
+            XCTAssertTrue(component.avPlayer === player)
+            XCTAssertEqual(entity.position, .zero)                 // not placed as a theatre screen
+            XCTAssertEqual(entity.scale, SIMD3<Float>(repeating: 1))
+            XCTAssertNil(entity.components[ModelComponent.self])
+        }
+    }
+
+    func testAutomaticEquirectangularUsesFull() throws {
+        for projection: IPaVisionSourceMetadata.Projection in [.equirectangular, .halfEquirectangular] {
+            let plan = IPaVisionRenderPlan.make(metadata: .init(projection: projection), correction: .automatic)
+            let entity = try IPaVisionRenderer.makeVideoEntity(plan: plan, player: player, correction: .automatic,
+                                                               frameAspectRatio: nil)
+            XCTAssertEqual(entity.components[VideoPlayerComponent.self]?.desiredImmersiveViewingMode, .full,
+                           "\(projection)")
+        }
+    }
+
+    /// The renderer only draws the player: building any entity leaves the
+    /// transport (rate, item, position) untouched.
+    func testRenderingNeverDrivesTransport() throws {
+        let source = AVPlayer()
+        let metas: [IPaVisionSourceMetadata] = [.init(projection: .rectilinear), .init(projection: .equirectangular),
+                                                .init(projection: .appleImmersive), .init(projection: .parametricImmersive)]
+        for meta in metas {
+            for correction in [IPaVisionCorrection.automatic, IPaVisionCorrection(projection: .equirectangular180)] {
+                let plan = IPaVisionRenderPlan.make(metadata: meta, correction: correction)
+                _ = try IPaVisionRenderer.makeVideoEntity(plan: plan, player: source, correction: correction,
+                                                          frameAspectRatio: 16.0 / 9.0)
+            }
+        }
+        XCTAssertEqual(source.rate, 0)
+        XCTAssertNil(source.currentItem)
+        XCTAssertEqual(source.timeControlStatus, .paused)
+    }
+
     func testAutomaticFlatUsesPortalScreen() throws {
         let plan = IPaVisionRenderPlan.make(metadata: .init(projection: .rectilinear), correction: .automatic)
         let entity = try IPaVisionRenderer.makeVideoEntity(plan: plan, player: player, correction: .automatic,

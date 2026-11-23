@@ -17,9 +17,22 @@ public struct IPaVisionSourceMetadata: Equatable, Hashable, Sendable {
         case rectilinear
         case equirectangular
         case halfEquirectangular
-        /// Wide-FOV lens model / Apple Immersive / a kind this build doesn't
-        /// name: not flat, but not something the custom renderer can map.
+        /// Wide-FOV lens model (`ParametricImmersive`).
+        case parametricImmersive
+        /// Apple Immersive Video (`AppleImmersiveVideo`).
+        case appleImmersive
+        /// Flagged non-rectilinear, or a projection kind this build doesn't
+        /// name. Not flat either.
         case otherNonRectilinear
+
+        /// A non-rectilinear projection that only the system renderer can
+        /// draw as tagged (the custom mesh has no model for it).
+        public var isSystemOnlyImmersive: Bool {
+            switch self {
+            case .parametricImmersive, .appleImmersive, .otherNonRectilinear: return true
+            case .rectilinear, .equirectangular, .halfEquirectangular: return false
+            }
+        }
     }
 
     public enum Packing: Equatable, Hashable, Sendable {
@@ -50,6 +63,8 @@ public struct IPaVisionSourceMetadata: Equatable, Hashable, Sendable {
         public static let rectilinear = "Rectilinear"
         public static let equirectangular = "Equirectangular"
         public static let halfEquirectangular = "HalfEquirectangular"
+        public static let parametricImmersive = "ParametricImmersive"
+        public static let appleImmersiveVideo = "AppleImmersiveVideo"
         public static let sideBySide = "SideBySide"
         public static let overUnder = "OverUnder"
     }
@@ -71,6 +86,8 @@ public struct IPaVisionSourceMetadata: Equatable, Hashable, Sendable {
             case CoreMediaValue.rectilinear: projection = .rectilinear
             case CoreMediaValue.equirectangular: projection = .equirectangular
             case CoreMediaValue.halfEquirectangular: projection = .halfEquirectangular
+            case CoreMediaValue.parametricImmersive: projection = .parametricImmersive
+            case CoreMediaValue.appleImmersiveVideo: projection = .appleImmersive
             default: projection = .otherNonRectilinear
             }
         }
@@ -105,6 +122,18 @@ public struct IPaVisionRenderPlan: Equatable, Sendable {
         case flat
         case equirectangular360
         case equirectangular180
+        /// The system renderer draws the asset's own non-rectilinear tags
+        /// (Apple Immersive, parametric / wide-FOV, or a kind this build
+        /// doesn't name) fully immersive. Only produced for `.system`; the
+        /// custom mesh cannot map these projections.
+        case systemImmersive
+
+        /// The surface the custom mesh renderer builds for this projection.
+        /// `.systemImmersive` never reaches it (see `make`), and would fall back
+        /// to a flat screen if it did.
+        public var customGeometry: Projection {
+            self == .systemImmersive ? .flat : self
+        }
     }
 
     public enum Eye: Equatable, Sendable { case left, right }
@@ -133,21 +162,25 @@ public struct IPaVisionRenderPlan: Equatable, Sendable {
 
     /// Decides the backend: the system renderer whenever the correction is
     /// automatic, the custom mono renderer otherwise.
+    ///
+    /// Automatic + tagged non-rectilinear media (Apple Immersive, parametric,
+    /// unnamed kinds) stays `.systemImmersive`. It is never flattened, so the
+    /// renderer presents it fully immersive instead of in a portal.
     public static func make(metadata: IPaVisionSourceMetadata,
                             correction rawCorrection: IPaVisionCorrection,
                             stereoBackend: IPaVisionStereoBackend = .current) -> IPaVisionRenderPlan {
         let correction = rawCorrection.clamped()
         let layout = resolvedLayout(metadata: metadata, correction: correction)
-        let (projection, projectionNote) = resolvedProjection(metadata: metadata, correction: correction)
 
         if correction.isAutomatic {
             return IPaVisionRenderPlan(backend: .system,
-                                       projection: projection,
+                                       projection: systemProjection(metadata: metadata),
                                        stereoLayout: layout,
                                        sourceRegion: .unit,
                                        stereoShownAsMono: false,
                                        notes: [])
         }
+        let (projection, projectionNote) = resolvedProjection(metadata: metadata, correction: correction)
         var notes: [Note] = []
         if let projectionNote { notes.append(projectionNote) }
         let isStereo = layout == .sideBySide || layout == .overUnder
@@ -175,6 +208,17 @@ public struct IPaVisionRenderPlan: Equatable, Sendable {
         }
     }
 
+    /// What the system renderer is asked to present for automatic playback.
+    static func systemProjection(metadata: IPaVisionSourceMetadata) -> Projection {
+        switch metadata.projection {
+        case .equirectangular: return .equirectangular360
+        case .halfEquirectangular: return .equirectangular180
+        case .parametricImmersive, .appleImmersive, .otherNonRectilinear: return .systemImmersive
+        case .rectilinear, nil: return .flat
+        }
+    }
+
+    /// Geometry for the custom mesh renderer (manual corrections).
     static func resolvedProjection(metadata: IPaVisionSourceMetadata,
                                    correction: IPaVisionCorrection) -> (Projection, Note?) {
         switch correction.projection {
@@ -186,7 +230,8 @@ public struct IPaVisionRenderPlan: Equatable, Sendable {
             case .equirectangular: return (.equirectangular360, nil)
             case .halfEquirectangular: return (.equirectangular180, nil)
             case .rectilinear, nil: return (.flat, nil)
-            case .otherNonRectilinear: return (.flat, .unsupportedSourceProjection)
+            case .parametricImmersive, .appleImmersive, .otherNonRectilinear:
+                return (.flat, .unsupportedSourceProjection)
             }
         }
     }

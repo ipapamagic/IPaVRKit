@@ -4,8 +4,9 @@
 //
 //  Builds the video entity for a render plan:
 //    - `.system`: `VideoPlayerComponent`. The system reads the asset's own
-//      projection / stereo tags (APMP 180/360, MV-HEVC, tagged SBS/OU) and
-//      renders them as tagged, both eyes included.
+//      projection / stereo tags (APMP 180/360, Apple Immersive, parametric,
+//      MV-HEVC, tagged SBS/OU) and renders them as tagged, both eyes included.
+//      Every immersive projection is `.full`; only flat media is `.portal`.
 //    - `.customMono`: a mesh from `IPaVisionGeometry` with a `VideoMaterial`.
 //      Both eyes see the same view (the selected eye of a packed frame).
 //
@@ -44,8 +45,10 @@ public enum IPaVisionRenderer {
         entity.name = "IPaVision.system"
         var component = VideoPlayerComponent(avPlayer: player)
         switch plan.projection {
-        case .equirectangular360, .equirectangular180:
-            // Tagged immersive media fills the space around the viewer.
+        case .equirectangular360, .equirectangular180, .systemImmersive:
+            // Tagged immersive media (equirectangular, Apple Immersive,
+            // parametric) fills the space around the viewer. It must never
+            // be shown in a portal.
             component.desiredImmersiveViewingMode = .full
         case .flat:
             component.desiredImmersiveViewingMode = .portal
